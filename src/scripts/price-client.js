@@ -1,0 +1,184 @@
+import { defaultPrices, priceFields, serviceChoices, calculateServices, priceRange, rupiah, validPriceSnapshot } from '../pricing.js';
+import '../order.css';
+import { orderChoices } from '../order-code.js';
+import { orderApi, orderSession } from './order-api.js';
+import { createBookingChallenge } from './booking-challenge.js';
+import { salon } from '../content.js';
+
+export function initPrices(root) {
+  let prices = defaultPrices;
+  let selections = [];
+  const kit = root.querySelector('[data-kit-choice]');
+  const glue = root.querySelector('[data-glue-choice]');
+  const status = root.querySelector('[data-prices-status]');
+  const retry = root.querySelector('[data-prices-retry]');
+  const link = root.querySelector('[data-estimate-link]');
+  const list = root.querySelector('[data-estimate-lines]');
+  const bookLink = root.querySelector('[data-estimate-book]');
+  let customerCode = '', savedSignature = '', attempt = null, generating = false;
+  const codeCreate = root.querySelector('[data-estimate-code-create]');
+  const codeCopy = root.querySelector('[data-order-code-copy]');
+  const challenge = createBookingChallenge({ api: orderSession, container: root.querySelector('[data-order-code-challenge]') });
+  window.addEventListener('pagehide', () => challenge.cancel());
+  const readChoices = () => orderChoices({ selections, kit: kit.checked, glue: glue.checked });
+  const codeStatus = root.querySelector('[data-estimate-code-status]');
+  codeCreate.addEventListener('click', async () => {
+    if (generating) return;
+    let choices;
+    try { choices = readChoices(); } catch { return; }
+    const signature = JSON.stringify(choices);
+    if (!attempt || attempt.signature !== signature) attempt = { signature, key: crypto.randomUUID() };
+    const requestKey = attempt.key;
+    generating = true; codeCreate.disabled = true; codeStatus.hidden = false; codeStatus.textContent = 'Menyimpan pilihan dan membuat kode…';
+    try {
+      const session = await challenge.verify();
+      const order = await orderApi('/api/booking/orders', { action: 'create', choices, key: requestKey, token: session.token }, { 'X-Booking-Nonce': session.nonce });
+      if (JSON.stringify(readChoices()) !== signature) { codeStatus.textContent = 'Pilihan berubah saat kode dibuat. Buat kode lagi untuk pilihan terbaru.'; return; }
+      customerCode = order.code; savedSignature = signature;
+      codeStatus.textContent = `Kode pilihan: ${customerCode}. Berlaku 30 hari. Kirim kepada Chii atau masukkan di formulir booking untuk melihat rincian. Kode ini tidak memesan jadwal atau memberi akses booking.`;
+      render();
+    } catch (error) { codeStatus.textContent = error.code?.startsWith('CHALLENGE') ? 'Pemeriksaan keamanan belum selesai. Pilihan tetap ada; coba lagi.' : error.message || 'Kode belum dapat dibuat. Pilihan tetap ada; coba lagi.'; }
+    finally { generating = false; codeCreate.disabled = Boolean(customerCode) || !(selections.length || kit.checked || glue.checked); }
+  });
+  codeCopy.addEventListener('click', async () => {
+    if (!customerCode) return;
+    try { await navigator.clipboard.writeText(customerCode); codeStatus.textContent = `Kode ${customerCode} tersalin. Tempel di formulir booking atau kirim kepada Chii.`; }
+    catch { codeStatus.textContent = `Salin kode secara manual: ${customerCode}`; }
+  });
+  bookLink.addEventListener('click', () => {
+    try { sessionStorage.removeItem('chii:calculator:v1'); if (customerCode) sessionStorage.setItem('chii:order-code', customerCode); else sessionStorage.removeItem('chii:order-code'); } catch {}
+  });
+  const feedback = root.querySelector('[data-calculator-feedback]');
+  const reset = root.querySelector('[data-estimate-reset]');
+  const title = field => `${field.name}${field.detail ? ` · ${field.detail}` : ''}`;
+  const announce = value => { feedback.textContent = value; };
+  const text = (selector, value) => root.querySelectorAll(selector).forEach(node => { node.textContent = value; });
+  const controls = new Map(serviceChoices.map(field => [field.id, {
+    row: root.querySelector(`[data-menu-item="${field.id}"]`),
+    input: root.querySelector(`[data-menu-choice="${field.id}"]`),
+    quantity: root.querySelector(`[data-menu-quantity="${field.id}"]`),
+  }]));
+  const summary = root.querySelector('[data-estimate-summary]');
+  if ('ResizeObserver' in window) {
+    const clearance = new ResizeObserver(() => {
+      summary.style.setProperty('--price-summary-clearance', `${summary.querySelector('summary').offsetHeight + 4}px`);
+    });
+    clearance.observe(summary.querySelector('summary'));
+  }
+  summary.addEventListener('toggle', () => {
+    if (summary.open && window.matchMedia('(max-width:720px) and (min-height:421px)').matches) {
+      summary.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
+  });
+  root.querySelector('.price-menu').addEventListener('focusin', () => { summary.open = false; });
+
+  function render() {
+    const focusedRemove = document.activeElement?.closest('[data-remove-service]')?.dataset.removeService;
+    for (const field of priceFields) {
+      const item = prices.items[field.id];
+      text(`[data-price-id="${field.id}"]`, priceRange(item.price, item.max));
+    }
+    text('[data-kit-price]', rupiah(prices.base)); text('[data-glue-price]', rupiah(prices.glue));
+    for (const field of serviceChoices) {
+      const control = controls.get(field.id);
+      const selected = selections.find(item => item.id === field.id);
+      control.input.checked = Boolean(selected);
+      control.row.classList.toggle('is-selected', Boolean(selected));
+      if (control.quantity) {
+        control.quantity.hidden = !selected;
+        control.quantity.querySelector('[data-menu-count]').textContent = String(selected?.quantity ?? 1);
+        control.quantity.querySelector('[data-quantity-step="-1"]').disabled = !selected || selected.quantity <= 1;
+        control.quantity.querySelector('[data-quantity-step="1"]').disabled = !selected || selected.quantity >= field.quantityMax;
+      }
+    }
+    kit.closest('.price-menu-item').classList.toggle('is-selected', kit.checked);
+    glue.closest('.price-menu-item').classList.toggle('is-selected', glue.checked);
+    const result = calculateServices(prices, selections, { kit: kit.checked, glue: glue.checked });
+    text('[data-estimate-total]', priceRange(result.min, result.max));
+    const countLabel = result.lines.length ? `${result.lines.length} pilihanmu` : 'Belum ada pilihan';
+    text('[data-estimate-count]', countLabel);
+    root.querySelector('[data-estimate-summary] > summary').setAttribute('aria-label', `${countLabel}. Estimasi ${priceRange(result.min, result.max)}. Lihat rincian.`);
+    root.querySelector('[data-estimate-empty]').hidden = result.lines.length > 0;
+    link.hidden = reset.hidden = bookLink.hidden = result.lines.length === 0;
+    if (customerCode && (result.lines.length === 0 || JSON.stringify(readChoices()) !== savedSignature)) { customerCode = ''; codeStatus.textContent = 'Pilihan berubah. Buat kode lagi untuk menyimpan rincian terbaru.'; codeStatus.hidden = false; }
+    codeCopy.hidden = !customerCode;
+    codeCreate.disabled = generating || Boolean(customerCode) || result.lines.length === 0;
+    list.replaceChildren();
+    for (const line of result.lines) {
+      const row = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = `${title(line)}${line.quantity > 1 ? ` × ${line.quantity}` : ''}`;
+      const value = document.createElement('strong'); value.textContent = priceRange(line.min, line.max);
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'text-link'; remove.textContent = 'Hapus';
+      remove.dataset.removeService = line.id; remove.setAttribute('aria-label', `Hapus ${title(line)}`);
+      row.append(name, value, remove); list.append(row);
+    }
+    if (focusedRemove) list.querySelector(`[data-remove-service="${focusedRemove}"]`)?.focus();
+    const message = `Halo Chii, saya ingin konsultasi layanan berikut:\n${result.lines.map(line => `- ${title(line)}${line.quantity > 1 ? ` × ${line.quantity}` : ''}: ${priceRange(line.min, line.max)}`).join('\n')}\nEstimasi: ${priceRange(result.min, result.max)} (belum ongkir). Mohon konfirmasi kombinasi layanan, satuan tambahan dan harga akhir. Setelah harga dan durasi disepakati, saya akan mengisi formulir booking di https://studio.example/book.`;
+    const codeMessage = customerCode ? `\n\nKode dari kalkulator: ${customerCode} (rincian pilihan layanan). Mohon periksa sebelum menyepakati harga dan durasi.` : '';
+    link.href = `${salon.whatsapp}?text=${encodeURIComponent(message + codeMessage)}`;
+  }
+
+  root.addEventListener('change', event => {
+    const input = event.target.closest('[data-menu-choice]');
+    if (input) {
+      const field = serviceChoices.find(item => item.id === input.dataset.menuChoice);
+      const replaced = input.checked && selections.some(item => item.id === field.alternative);
+      selections = selections.filter(item => item.id !== field.id && (!input.checked || item.id !== field.alternative));
+      if (input.checked) selections.push({ id: field.id, quantity: 1 });
+      render(); announce(`${title(field)} ${input.checked ? 'dipilih' : 'dihapus'}.${replaced ? ' Pilihan 1 / 10 kuku sebelumnya diganti.' : ''}`);
+    } else if (event.target === kit || event.target === glue) { render(); announce('Estimasi diperbarui.'); }
+  });
+  root.addEventListener('click', event => {
+    const button = event.target.closest('[data-quantity-step]');
+    if (!button || button.disabled) return;
+    const field = serviceChoices.find(item => item.id === button.dataset.serviceId);
+    const selected = selections.find(item => item.id === field.id);
+    if (!selected) return;
+    selected.quantity = Math.max(1, Math.min(field.quantityMax, selected.quantity + Number(button.dataset.quantityStep)));
+    render(); announce(`${title(field)}: ${selected.quantity}.`);
+  });
+  list.addEventListener('click', event => {
+    const button = event.target.closest('[data-remove-service]'); if (!button) return;
+    const removeIndex = [...list.querySelectorAll('[data-remove-service]')].indexOf(button);
+    const id = button.dataset.removeService;
+    if (id === 'kit') kit.checked = false;
+    else if (id === 'glue') glue.checked = false;
+    else selections = selections.filter(item => item.id !== id);
+    render(); announce('Pilihan dihapus.');
+    const remaining = list.querySelectorAll('[data-remove-service]');
+    (remaining[Math.min(removeIndex, remaining.length - 1)] || summary.querySelector('summary')).focus({ preventScroll: true });
+  });
+  reset.addEventListener('click', () => {
+    selections = []; kit.checked = false; glue.checked = false; customerCode = ''; codeStatus.hidden = true; codeStatus.textContent = '';
+    render(); announce('Pilihan dikosongkan.'); summary.open = false; summary.querySelector('summary').focus({ preventScroll: true });
+  });
+  for (const input of root.querySelectorAll('[data-menu-choice],[data-kit-choice],[data-glue-choice]')) input.disabled = false;
+  render();
+  let loading = false;
+  async function refresh() {
+    if (loading) return;
+    loading = true; retry.hidden = true;
+    status.textContent = 'Memeriksa harga…';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch('/api/prices', { credentials: 'omit', signal: controller.signal, headers: { Accept: 'application/json' } });
+      const snapshot = await response.json();
+      if (!response.ok || !validPriceSnapshot(snapshot)) throw new Error('unavailable');
+      prices = snapshot.prices; render();
+      status.textContent = 'Harga terbaru dimuat.';
+    } catch {
+      status.textContent = 'Harga terbaru belum dapat diperiksa. Estimasi memakai daftar terakhir di halaman; konfirmasikan melalui WhatsApp atau coba lagi.';
+      retry.hidden = false;
+    } finally { clearTimeout(timeout); loading = false; }
+  }
+  retry.addEventListener('click', refresh);
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); refresh(); }
+    }, { rootMargin: '200px' });
+    observer.observe(root);
+  } else refresh();
+}

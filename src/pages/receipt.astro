@@ -1,0 +1,29 @@
+---
+import '../styles.css';
+import '../receipt.css';
+import { salon } from '../content.js';
+import Document from '../layouts/Document.astro';
+---
+<Document title="Kuitansi pembayaran | Chii Nails" bodyClass="receipt-page" serifFont={false} branded={false}>
+  <main class="receipt-document" aria-busy="true">
+    <header class="receipt-heading"><img src="/images/logo-brand.webp" width="96" height="96" alt="Chii Nails Nail Art Studio" /><div><h1>Kuitansi pembayaran</h1><p>Chii Nails · Palembang</p></div></header>
+    <p id="receipt-status" class="receipt-screen-only" role="status" aria-live="polite">Memuat kuitansi…</p>
+    <noscript><p>Aktifkan JavaScript untuk membuka kuitansi dari tautan pribadi ini.</p></noscript>
+    <section id="receipt-details" hidden aria-label="Detail kuitansi">
+      <p id="receipt-number" class="receipt-number"></p><p id="receipt-state" class="receipt-state"></p>
+      <h2 id="receipt-appointment-state" class="receipt-appointment-title">Jadwal kunjungan</h2>
+      <dl class="receipt-summary"><div><dt>Pelanggan</dt><dd data-receipt="name"></dd></div><div><dt>Tanggal kunjungan · WIB</dt><dd data-receipt="date"></dd></div><div><dt>Waktu · WIB</dt><dd data-receipt="time"></dd></div></dl>
+      <div class="receipt-location"><strong>Lokasi</strong><address>Chii Nails · Dewi Salon<br />{salon.address}</address><a href={salon.directions} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Petunjuk arah</a></div>
+      <div id="receipt-calendar" class="receipt-calendar" hidden><a id="receipt-calendar-google" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Tambahkan ke Google Calendar</a><a id="receipt-calendar-file" class="receipt-screen-only" download="chii-nails-appointment.ics">Kalender lain (.ics)</a><p class="receipt-help receipt-screen-only">Simpan acaranya di kalendermu. File .ics menyertakan pengingat 1 hari dan 2 jam; Google Calendar memakai pengaturanmu. Jika jadwal berubah, perbarui acara yang disimpan.</p></div>
+      <table><caption>Layanan sesuai konsultasi</caption><thead><tr><th scope="col">Layanan</th><th scope="col">Jumlah</th></tr></thead><tbody><tr><td data-receipt="design"></td><td>1 booking</td></tr></tbody></table>
+      <dl class="receipt-totals"><div><dt>Harga total</dt><dd data-receipt="total"></dd></div><div><dt>Pembayaran diterima</dt><dd data-receipt="paid"></dd></div><div id="receipt-balance-row"><dt>Sisa pembayaran</dt><dd data-receipt="balance"></dd></div></dl>
+      <p id="receipt-note" class="receipt-note">Diterbitkan dari booking yang telah diterima Chii setelah pemeriksaan pembayaran. Jumlah di atas mencatat pembayaran yang telah dikonfirmasi; sisa pembayaran masih harus dilunasi jika ada.</p>
+      <footer>Terima kasih sudah memilih Chii Nails.</footer>
+    </section>
+    <nav class="receipt-actions receipt-screen-only" aria-label="Tindakan kuitansi"><button id="receipt-print" type="button" class="button" disabled>Print / Save as PDF</button><button id="receipt-retry" type="button" class="text-link" hidden>Coba lagi</button></nav>
+    <p class="receipt-screen-only receipt-help">Pada menu cetak browser, pilih printer atau Simpan sebagai PDF.</p>
+  </main>
+  <Fragment slot="scripts">
+    <script src="../scripts/receipt-client.js"></script>
+  </Fragment>
+</Document>

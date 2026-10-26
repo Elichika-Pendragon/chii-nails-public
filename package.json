@@ -1,0 +1,15 @@
+{
+  "name": "chii-nails-public",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sanitized Chii Nails booking and calculator reference with synthetic tests",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test server/*.test.js",
+    "example": "node examples/calculator.mjs",
+    "check:public": "node scripts/check-public-content.mjs"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.wrangler/
+.private/
+.env
+.env.*
+!.env.example
+.dev.vars*
+*.sql.backup
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+*.log
+*-scan.json
+coverage/
+__pycache__/
