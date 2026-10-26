@@ -22,6 +22,46 @@ Codex proposed technical approaches, authored and refactored the application, pr
 
 The studio owner supplied business requirements and remains responsible for checking actual bank transactions and accepting appointments. An image-validation routine cannot establish that a bank transfer is genuine.
 
+## Sketching the algorithm with a chemistry background
+
+My background is chemistry, not software engineering. I approached this part of the project by asking about variables, combinations, calculations and limits before worrying about code syntax. Could nail art, Cat Eye, extensions, glitter and removal be combined? How many possible combinations would that create? How much work would the server have to do?
+
+That led to a concrete product idea: let a customer generate a short code from their calculator choices, paste it into the booking page and recover the details. I asked for five letters/numbers, an optional field for customers who did not use the calculator, editable final prices, and an owner dashboard to check or correct the order. I also explicitly asked to keep the owner's booking approval separate.
+
+### From choices to a calculation
+
+The following notation summarizes the reasoning; it is a retrospective explanation, not a claim that I wrote the implementation or these exact equations during development.
+
+If each independent choice has `s_i` possible states, including unselected, the unconstrained combination count is:
+
+```text
+N = s_1 × s_2 × ... × s_n
+```
+
+Actual valid combinations are fewer when alternatives cannot be selected together or quantities have limits. Crucially, the system does not calculate and store every possible combination in advance. It validates the customer's selected items and calculates that order.
+
+For each selected line, let `q_i` be its quantity and `[l_i, u_i]` its price range. A fixed price simply has `l_i = u_i`. Treat optional kit/glue charges as additional lines:
+
+```text
+Estimated minimum = Σ(q_i × l_i)
+Estimated maximum = Σ(q_i × u_i)
+Remaining balance = agreed final price − recorded payment
+```
+
+The chemistry connection is in the discipline of the calculation: define what each quantity means, keep units consistent, apply constraints and check the result. A price per nail and a price for ten nails cannot be treated as interchangeable units. Likewise, an estimate is not the same measurement as an agreed price, and an uploaded image is not confirmation that money arrived.
+
+### What the short code actually does
+
+My initial question was whether an algorithm could give each combination a unique short code. The implemented solution uses a randomly generated five-character reference to a stored estimate. The database checks uniqueness, and allocation retries a collision without overwriting another order. The same choices are not guaranteed to produce the same code. This avoids pretending that a tiny code can contain every selection, price and later correction.
+
+I defined the desired behavior and questioned the computational cost. Codex selected and implemented the storage, random generation, collision handling, validation and tests. The code restores an estimate; it does not verify payment, reserve a slot or grant approval rights.
+
+### From a result to evidence
+
+When the Calendar incident appeared, I requested repeated simulations, investigation of the exact cause and retained error logs. That resembles the quality-control habit of investigating a result that does not match expectations. It also exposed a limit: repeating the same incomplete test cannot reveal an assumption the test never challenges. Codex had to change the provider-response fixtures, not merely run them more times.
+
+My contribution was turning practical questions into requirements and challenging whether the outcome made sense. The technical implementation was AI-assisted. The lesson for my PM practice is to ask for representative failure cases and observable evidence, rather than equate a large test count with certainty.
+
 ## Decisions and tradeoffs
 
 | Decision | Why it mattered | Tradeoff |
